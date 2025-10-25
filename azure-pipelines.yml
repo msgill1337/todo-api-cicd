@@ -12,9 +12,13 @@ variables:
   - name: buildNumber
     value: '$(Build.BuildNumber)'
   - name: acrName
-    value: 'YOUR_ACR_NAME'  # Replace with your ACR name
+    value: 'acrprod01mg1337'  # Replace with your ACR name
   - name: imageName
     value: 'todo-api'
+  - name: dockerConnectionName
+    value: 'acr-connection'
+  - name: k8sServiceConnection
+    value: 'aks-connection'
 
 stages:
   # ========================================
@@ -33,6 +37,10 @@ stages:
           - task: Docker@2
             displayName: 'Build Docker Image'
             inputs:
+                command: 'build'
+                Dockerfile: 'Dockerfile'
+                repository: '$(imageName)'
+                tags: '$(Build.BuildId)'
               # Fill in the Docker task parameters
               # Hint: command, repository, dockerfile, tags
 
@@ -40,18 +48,44 @@ stages:
           - script: |
               # Run tests here
               # Hint: docker run with test command
+              docker run --rm $(imageName):/$(Build.BuildId) npm test
             displayName: 'Run Unit Tests'
+            continueOnError: false
+
 
           # YOUR TASK: Scan image with Trivy
           - script: |
               # Install and run Trivy
               # Scan for vulnerabilities
-            displayName: 'Security Scan with Trivy'
 
+              sudo apt-get update
+              sudo apt-get install wget apt-transport-https gnupg lsb-release -y
+              wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+              echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+              sudo apt-get update
+              sudo apt-get install trivy -y
+
+              echo "Scanning image for vulnerabilities..."
+              # Scan and save report
+              trivy image --format table --output trivy-report.txt $(imageName):$(Build.BuildId)
+
+              cat trivy-report.txt
+
+              trivy image --exit-code 1 --severity HIGH,CRITICAL $(imageName):$(Build.BuildId)
+            displayName: 'Security Scan with Trivy'
+            continueOnError: false
+
+          - script: |
+                docker tag $(imageName):/$(Build.BuildId) $(ACR_LOGIN_SERVER)/$(imageName):$(Build.BuildId)
+            displayName: 'Tagging the image before push'
           # YOUR TASK: Push image to ACR
           - task: Docker@2
             displayName: 'Push to ACR'
             inputs:
+              command: 'push'
+              containerRegistry: '$(dockerConnectionName)'
+              repository: '$(imageName)'
+              tags: '$(Build.BuildId)'
               # Fill in push parameters
 
   # ========================================
@@ -70,20 +104,55 @@ stages:
             deploy:
               steps:
                 # YOUR TASK: Replace tokens in K8s manifests
-                - task: replacetokens@5
+                - script: |
+                    sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/deployment.yaml
+                    sed -i 's|#{ENVIRONMENT}#|dev|g' k8s/deployment.yaml
+                    sed -i 's|#{BUILD_NUMBER}#|$(Build.BuildId)|g' k8s/deployment.yaml
                   displayName: 'Replace tokens in manifests'
-                  inputs:
-                    # Configure token replacement
+                
 
                 # YOUR TASK: Deploy to AKS dev namespace
                 - task: Kubernetes@1
                   displayName: 'Deploy to AKS Dev'
                   inputs:
                     # Configure kubectl deployment
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'dev'
+                    command: 'apply'
+                    arguments: '-f k8s/deployment.yaml'
 
                 # YOUR TASK: Run smoke tests
                 - script: |
                     # Test the deployed service
+                    echo "Waiting for pods to be ready..."
+                    kubectl wait --for-condition=available --timeout=120s deployment/todo-api -n todo-dev 
+
+                    echo "Getting pod name..."
+                    POD_NAME=$(kubectl get pods -n todo-dev -l app=todo-api -o jsonpath='{.items[0].metadata.name}')
+
+                    echo "Testing pod: $POD_NAME"
+                    
+                    #port-forward in background
+                    kubectl port-forward -n todo-dev $POD_NAME 8080:3000 &
+                    PORT_FORWARD_PID=$!
+
+                    sleep 5
+
+                    #Testing the health endpoint
+                    echo "Testing the health endpoint..."
+                    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
+
+                    #Kill port foward
+                    kill $PORT_FORWARD_PID
+
+                    if [ "$RESPONSE" = "200"]; then
+                      echo "✅ Smoke test passed: Health check returned "200"
+                    else
+                      echo "❌ Smoke test failed: Health check returned $RESPONSE"
+                      exit 1
+                    fi
+
                   displayName: 'Smoke Tests'
 
   # ========================================
@@ -102,7 +171,56 @@ stages:
             deploy:
               steps:
                 # YOUR TASK: Similar to dev, but staging namespace
-                - script: echo "Deploy to staging"
+                - script: |
+                    sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/deployment.yaml
+                    sed -i 's|#{ENVIRONMENT}#|staging|g' k8s/deployment.yaml
+                    sed -i 's|#{BUILD_NUMBER}#|$(Build.BuildId)|g' k8s/deployment.yaml
+                  displayName: 'Replace tokens in manifests'
+                
+
+                # YOUR TASK: Deploy to AKS Staging namespace
+                - task: Kubernetes@1
+                  displayName: 'Deploy to AKS Staging'
+                  inputs:
+                    # Configure kubectl deployment
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'staging'
+                    command: 'apply'
+                    arguments: '-f k8s/deployment.yaml'
+
+                # YOUR TASK: Run smoke tests
+                - script: |
+                    # Test the deployed service
+                    echo "Waiting for pods to be ready..."
+                    kubectl wait --for-condition=available --timeout=120s deployment/todo-api -n todo-staging
+
+                    echo "Getting pod name..."
+                    POD_NAME=$(kubectl get pods -n todo-staging -l app=todo-api -o jsonpath='{.items[0].metadata.name}')
+
+                    echo "Testing pod: $POD_NAME"
+                    
+                    #port-forward in background
+                    kubectl port-forward -n todo-dev $POD_NAME 8080:3000 &
+                    PORT_FORWARD_PID=$!
+
+                    sleep 5
+
+                    #Testing the health endpoint
+                    echo "Testing the health endpoint..."
+                    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
+
+                    #Kill port foward
+                    kill $PORT_FORWARD_PID
+
+                    if [ "$RESPONSE" = "200"]; then
+                      echo "✅ Smoke test passed: Health check returned "200"
+                    else
+                      echo "❌ Smoke test failed: Health check returned $RESPONSE"
+                      exit 1
+                    fi
+
+                  displayName: 'Smoke Tests'
 
   # ========================================
   # STAGE 4: DEPLOY TO PROD
