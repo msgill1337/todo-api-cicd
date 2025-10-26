@@ -1,7 +1,7 @@
 trigger:
   branches:
     include:
-      - main
+      # - main
       - Dev
 
 pool:
@@ -46,10 +46,14 @@ stages:
 
           # YOUR TASK: Run unit tests
           - script: |
-              docker images
+              docker run -d --name test-container $(imageName):$(Build.BuildId)
+
+              sleep 5
               # Run tests here
               # Hint: docker run with test command
-              docker run --rm $(imageName):$(Build.BuildId) npm test
+              docker exec test-container npm test
+              docker stop test-container
+              docker rm test-container
             displayName: 'Run Unit Tests'
             continueOnError: false
 
