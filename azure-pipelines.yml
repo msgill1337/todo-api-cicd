@@ -130,7 +130,15 @@ stages:
                     command: 'apply'
                     arguments: '-f k8s/'
 
-
+                - task: AzureCLI@2
+                  displayName: 'Set AKS Credentials'
+                  inputs:
+                    azureSubscription: 'azure-connection' # Replace with your service connection name
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      az aks get-credentials --resource-group $(AKS_RESOURCE_GROUP) --name $(AKS_CLUSTER_NAME) --overwrite-existing
+                      kubectl config use-context $(kubectl config current-context)
 
                 # YOUR TASK: Run smoke tests
                 - script: |
@@ -222,6 +230,16 @@ stages:
                     command: 'apply'
                     arguments: '-f k8s/'
 
+                - task: AzureCLI@2
+                  displayName: 'Set AKS Credentials'
+                  inputs:
+                    azureSubscription: 'azure-connection' # Replace with your service connection name
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      az aks get-credentials --resource-group $(AKS_RESOURCE_GROUP) --name $(AKS_CLUSTER_NAME) --overwrite-existing
+                      kubectl config use-context $(kubectl config current-context)
+                      
                 # YOUR TASK: Run smoke tests
                 - script: |
                     echo "Running smoke tests against deployed app in staging namespace..."
@@ -275,6 +293,8 @@ stages:
                     
                     echo "✅ All smoke tests passed!"
                   displayName: 'Smoke Tests'
+                  env: 
+                    KUBECONFIG: $(System.DefaultWorkingDirectory)/kubeconfig
                   continueOnError: false
 
   # ========================================
