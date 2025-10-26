@@ -41,6 +41,7 @@ stages:
                 Dockerfile: 'Dockerfile'
                 repository: '$(imageName)'
                 tags: '$(Build.BuildId)'
+                arguments: '--no-cache'
               # Fill in the Docker task parameters
               # Hint: command, repository, dockerfile, tags
 
