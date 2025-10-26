@@ -10,5 +10,8 @@
   },
   "devDependencies": {
     "supertest": "^6.3.4"
+  },
+  "overrides": {
+    "cross-spawn": "7.0.6"
   }
 }
