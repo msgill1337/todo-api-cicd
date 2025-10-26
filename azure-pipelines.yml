@@ -46,6 +46,7 @@ stages:
 
           # YOUR TASK: Run unit tests
           - script: |
+              docker images
               # Run tests here
               # Hint: docker run with test command
               docker run --rm $(imageName):/$(Build.BuildId) npm test
