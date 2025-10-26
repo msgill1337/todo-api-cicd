@@ -1,17 +1,14 @@
 const express = require('express');
 const app = express();
-const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// In-memory storage (simple for demo)
 let todos = [
   { id: 1, title: 'Learn Docker', completed: false },
   { id: 2, title: 'Learn Kubernetes', completed: false },
   { id: 3, title: 'Build CI/CD Pipeline', completed: false }
 ];
 
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'healthy',
@@ -20,19 +17,16 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Get all todos
 app.get('/api/todos', (req, res) => {
   res.json(todos);
 });
 
-// Get single todo
 app.get('/api/todos/:id', (req, res) => {
   const todo = todos.find(t => t.id === parseInt(req.params.id));
   if (!todo) return res.status(404).json({ error: 'Todo not found' });
   res.json(todo);
 });
 
-// Create todo
 app.post('/api/todos', (req, res) => {
   const todo = {
     id: todos.length + 1,
@@ -43,7 +37,6 @@ app.post('/api/todos', (req, res) => {
   res.status(201).json(todo);
 });
 
-// Update todo
 app.put('/api/todos/:id', (req, res) => {
   const todo = todos.find(t => t.id === parseInt(req.params.id));
   if (!todo) return res.status(404).json({ error: 'Todo not found' });
@@ -54,7 +47,6 @@ app.put('/api/todos/:id', (req, res) => {
   res.json(todo);
 });
 
-// Delete todo
 app.delete('/api/todos/:id', (req, res) => {
   const index = todos.findIndex(t => t.id === parseInt(req.params.id));
   if (index === -1) return res.status(404).json({ error: 'Todo not found' });
@@ -63,20 +55,14 @@ app.delete('/api/todos/:id', (req, res) => {
   res.json({ message: 'Todo deleted' });
 });
 
-// Function to start the server
-function startServer() {
-  const server = app.listen(port, '0.0.0.0', () => {
+// Only start if run directly
+if (require.main === module) {
+  const port = process.env.PORT || 3000;
+  app.listen(port, '0.0.0.0', () => {
     console.log(`Todo API listening on port ${port}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`Build: ${process.env.BUILD_NUMBER || 'local'}`);
   });
-  return server;
 }
 
-// Only start server if running directly (not imported)
-if (require.main === module) {
-  startServer();
-}
-
-// Export app and startServer function for testing
-module.exports = { app, startServer };
+module.exports = app;

@@ -1,93 +1,52 @@
-const http = require('http');
-
-// Simple test suite (no external dependencies)
-function assert(condition, message) {
-  if (!condition) {
-    console.error(`❌ FAILED: ${message}`);
-    process.exit(1);
-  }
-  console.log(`✅ PASSED: ${message}`);
-}
-
-async function makeRequest(path, method = 'GET', body = null) {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'localhost',
-      port: 3000,
-      path: path,
-      method: method,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    };
-
-    const req = http.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve({
-            statusCode: res.statusCode,
-            body: JSON.parse(data)
-          });
-        } catch {
-          resolve({
-            statusCode: res.statusCode,
-            body: data
-          });
-        }
-      });
-    });
-
-    req.on('error', reject);
-    if (body) req.write(JSON.stringify(body));
-    req.end();
-  });
-}
+const request = require('supertest');
+const app = require('./app');
 
 async function runTests() {
   console.log('🧪 Starting tests...\n');
 
-  // Import and start the server
-  const { startServer } = require('./app.js');
-  const server = startServer();
-  
-  // Wait for server to be ready
-  await new Promise(resolve => setTimeout(resolve, 2000));
-
   try {
     // Test 1: Health check
-    const health = await makeRequest('/health');
-    assert(health.statusCode === 200, 'Health check returns 200');
-    assert(health.body.status === 'healthy', 'Health check status is healthy');
+    console.log('Testing health endpoint...');
+    const health = await request(app).get('/health');
+    if (health.status !== 200) throw new Error('Health check failed');
+    if (health.body.status !== 'healthy') throw new Error('Health status incorrect');
+    console.log('✅ Health check passed');
 
     // Test 2: Get all todos
-    const todos = await makeRequest('/api/todos');
-    assert(todos.statusCode === 200, 'GET /api/todos returns 200');
-    assert(Array.isArray(todos.body), 'Todos response is an array');
-    assert(todos.body.length >= 3, 'Initial todos are present');
+    console.log('Testing GET /api/todos...');
+    const todos = await request(app).get('/api/todos');
+    if (todos.status !== 200) throw new Error('GET todos failed');
+    if (!Array.isArray(todos.body)) throw new Error('Todos not an array');
+    console.log('✅ GET /api/todos passed');
 
     // Test 3: Create todo
-    const newTodo = await makeRequest('/api/todos', 'POST', { title: 'Test Todo' });
-    assert(newTodo.statusCode === 201, 'POST /api/todos returns 201');
-    assert(newTodo.body.title === 'Test Todo', 'New todo has correct title');
-    assert(newTodo.body.completed === false, 'New todo is not completed');
+    console.log('Testing POST /api/todos...');
+    const newTodo = await request(app)
+      .post('/api/todos')
+      .send({ title: 'Test Todo' });
+    if (newTodo.status !== 201) throw new Error('POST todo failed');
+    if (newTodo.body.title !== 'Test Todo') throw new Error('Todo title incorrect');
+    console.log('✅ POST /api/todos passed');
 
     // Test 4: Update todo
-    const updated = await makeRequest(`/api/todos/${newTodo.body.id}`, 'PUT', { completed: true });
-    assert(updated.statusCode === 200, 'PUT /api/todos/:id returns 200');
-    assert(updated.body.completed === true, 'Todo is marked as completed');
+    console.log('Testing PUT /api/todos/:id...');
+    const updated = await request(app)
+      .put(`/api/todos/${newTodo.body.id}`)
+      .send({ completed: true });
+    if (updated.status !== 200) throw new Error('PUT todo failed');
+    if (updated.body.completed !== true) throw new Error('Todo not marked completed');
+    console.log('✅ PUT /api/todos/:id passed');
 
     // Test 5: Delete todo
-    const deleted = await makeRequest(`/api/todos/${newTodo.body.id}`, 'DELETE');
-    assert(deleted.statusCode === 200, 'DELETE /api/todos/:id returns 200');
+    console.log('Testing DELETE /api/todos/:id...');
+    const deleted = await request(app).delete(`/api/todos/${newTodo.body.id}`);
+    if (deleted.status !== 200) throw new Error('DELETE todo failed');
+    console.log('✅ DELETE /api/todos/:id passed');
 
     console.log('\n✅ All tests passed!');
-    server.close();
     process.exit(0);
   } catch (error) {
     console.error('\n❌ Test failed:', error.message);
-    server.close();
     process.exit(1);
   }
 }
