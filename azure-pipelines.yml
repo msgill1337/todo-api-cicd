@@ -137,8 +137,6 @@ stages:
                     scriptType: 'bash'
                     scriptLocation: 'inlineScript'
                     inlineScript: |
-                      # Install kubelogin
-                      az aks install-cli
 
                       az aks get-credentials --resource-group $(AKS_RESOURCE_GROUP) --name $(AKS_CLUSTER_NAME) --overwrite-existing
                       kubectl config use-context $(kubectl config current-context)
@@ -240,8 +238,7 @@ stages:
                     scriptType: 'bash'
                     scriptLocation: 'inlineScript'
                     inlineScript: |
-                      # Install kubelogin
-                      az aks install-cli
+                
                       
                       az aks get-credentials --resource-group $(AKS_RESOURCE_GROUP) --name $(AKS_CLUSTER_NAME) --overwrite-existing
                       kubectl config use-context $(kubectl config current-context)
