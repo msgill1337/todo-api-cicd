@@ -134,36 +134,58 @@ stages:
 
                 # YOUR TASK: Run smoke tests
                 - script: |
-                    # Test the deployed service
-                    echo "Waiting for pods to be ready..."
-                    kubectl wait --for-condition=available --timeout=120s deployment/todo-api -n todo-dev 
-
-                    echo "Getting pod name..."
-                    POD_NAME=$(kubectl get pods -n todo-dev -l app=todo-api -o jsonpath='{.items[0].metadata.name}')
-
-                    echo "Testing pod: $POD_NAME"
+                    echo "Running smoke tests against deployed app in dev namespace..."
                     
-                    #port-forward in background
-                    kubectl port-forward -n todo-dev $POD_NAME 8080:3000 &
-                    PORT_FORWARD_PID=$!
-
-                    sleep 5
-
-                    #Testing the health endpoint
-                    echo "Testing the health endpoint..."
-                    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
-
-                    #Kill port foward
-                    kill $PORT_FORWARD_PID
-
-                    if [ "$RESPONSE" = "200"]; then
-                      echo "✅ Smoke test passed: Health check returned "200"
-                    else
-                      echo "❌ Smoke test failed: Health check returned $RESPONSE"
+                    # Wait for deployment to be ready
+                    kubectl wait --for=condition=available --timeout=120s deployment/todo-api -n dev
+                    
+                    # Get the service external IP (LoadBalancer)
+                    SERVICE_IP=$(kubectl get svc todo-api-service -n dev -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                    echo "Service IP: $SERVICE_IP"
+                    
+                    # Wait for LoadBalancer IP to be assigned
+                    RETRY_COUNT=0
+                    MAX_RETRIES=30
+                    while [ -z "$SERVICE_IP" ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                      echo "Waiting for LoadBalancer IP... (attempt $RETRY_COUNT/$MAX_RETRIES)"
+                      sleep 10
+                      SERVICE_IP=$(kubectl get svc todo-api-service -n dev -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                      RETRY_COUNT=$((RETRY_COUNT + 1))
+                    done
+                    
+                    if [ -z "$SERVICE_IP" ]; then
+                      echo "Failed to get LoadBalancer IP after $MAX_RETRIES attempts"
                       exit 1
                     fi
-
+                    
+                    echo "Testing health endpoint at http://$SERVICE_IP/health"
+                    
+                    # Test health endpoint
+                    HEALTH_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/health)
+                    
+                    if [ "$HEALTH_RESPONSE" = "200" ]; then
+                      echo "✅ Health check passed!"
+                      curl -s http://$SERVICE_IP/health | jq '.'
+                    else
+                      echo "❌ Health check failed with status: $HEALTH_RESPONSE"
+                      exit 1
+                    fi
+                    
+                    # Test API endpoint
+                    echo "Testing API endpoint at http://$SERVICE_IP/api/todos"
+                    API_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/api/todos)
+                    
+                    if [ "$API_RESPONSE" = "200" ]; then
+                      echo "✅ API check passed!"
+                      curl -s http://$SERVICE_IP/api/todos | jq '.'
+                    else
+                      echo "❌ API check failed with status: $API_RESPONSE"
+                      exit 1
+                    fi
+                    
+                    echo "✅ All smoke tests passed!"
                   displayName: 'Smoke Tests'
+                  continueOnError: false
 
   # ========================================
   # STAGE 3: DEPLOY TO STAGING
