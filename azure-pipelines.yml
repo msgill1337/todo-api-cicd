@@ -82,7 +82,7 @@ stages:
             continueOnError: false
 
           - script: |
-                docker tag $(imageName):/$(Build.BuildId) $(ACR_LOGIN_SERVER)/$(imageName):$(Build.BuildId)
+                docker tag $(imageName):$(Build.BuildId) $(ACR_LOGIN_SERVER)/$(imageName):$(Build.BuildId)
             displayName: 'Tagging the image before push'
           # YOUR TASK: Push image to ACR
           - task: Docker@2
