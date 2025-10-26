@@ -128,7 +128,7 @@ stages:
                     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
                     namespace: 'todo-dev'
                     command: 'apply'
-                    arguments: '-f /'
+                    arguments: '-f k8s/'
 
 
 
@@ -198,7 +198,7 @@ stages:
                     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
                     namespace: 'todo-staging'
                     command: 'apply'
-                    arguments: '-f /'
+                    arguments: '-f k8s/'
 
                 # YOUR TASK: Run smoke tests
                 - script: |
