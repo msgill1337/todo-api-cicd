@@ -126,7 +126,7 @@ stages:
                     # Configure kubectl deployment
                     connectionType: 'Kubernetes Service Connection'
                     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
-                    namespace: 'dev'
+                    namespace: 'todo-dev'
                     command: 'apply'
                     arguments: '-f k8s/deployment.yaml'
 
@@ -194,7 +194,7 @@ stages:
                     # Configure kubectl deployment
                     connectionType: 'Kubernetes Service Connection'
                     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
-                    namespace: 'staging'
+                    namespace: 'todo-staging'
                     command: 'apply'
                     arguments: '-f k8s/deployment.yaml'
 
