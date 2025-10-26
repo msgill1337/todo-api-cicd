@@ -41,7 +41,6 @@ stages:
                 Dockerfile: 'Dockerfile'
                 repository: '$(imageName)'
                 tags: '$(Build.BuildId)'
-                arguments: '--no-cache'
               # Fill in the Docker task parameters
               # Hint: command, repository, dockerfile, tags
 
@@ -111,6 +110,8 @@ stages:
               steps:
                 # YOUR TASK: Replace tokens in K8s manifests
                 - script: |
+                    ls -la
+
                     sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/deployment.yaml
                     sed -i 's|#{ENVIRONMENT}#|dev|g' k8s/deployment.yaml
                     sed -i 's|#{BUILD_NUMBER}#|$(Build.BuildId)|g' k8s/deployment.yaml
