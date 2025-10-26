@@ -63,12 +63,20 @@ app.delete('/api/todos/:id', (req, res) => {
   res.json({ message: 'Todo deleted' });
 });
 
-// Start server
-const server = app.listen(port, '0.0.0.0', () => {
-  console.log(`Todo API listening on port ${port}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Build: ${process.env.BUILD_NUMBER || 'local'}`);
-});
+// Function to start the server
+function startServer() {
+  const server = app.listen(port, '0.0.0.0', () => {
+    console.log(`Todo API listening on port ${port}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Build: ${process.env.BUILD_NUMBER || 'local'}`);
+  });
+  return server;
+}
 
-// Export for testing
-module.exports = { app, server };
+// Only start server if running directly (not imported)
+if (require.main === module) {
+  startServer();
+}
+
+// Export app and startServer function for testing
+module.exports = { app, startServer };

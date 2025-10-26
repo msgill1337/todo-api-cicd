@@ -48,11 +48,12 @@ async function makeRequest(path, method = 'GET', body = null) {
 async function runTests() {
   console.log('🧪 Starting tests...\n');
 
-  // Start the app
-  const { server } = require('./app.js');
+  // Import and start the server
+  const { startServer } = require('./app.js');
+  const server = startServer();
   
   // Wait for server to be ready
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise(resolve => setTimeout(resolve, 2000));
 
   try {
     // Test 1: Health check
@@ -82,12 +83,12 @@ async function runTests() {
     assert(deleted.statusCode === 200, 'DELETE /api/todos/:id returns 200');
 
     console.log('\n✅ All tests passed!');
+    server.close();
     process.exit(0);
   } catch (error) {
     console.error('\n❌ Test failed:', error.message);
-    process.exit(1);
-  } finally {
     server.close();
+    process.exit(1);
   }
 }
 
