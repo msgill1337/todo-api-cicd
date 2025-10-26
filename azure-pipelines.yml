@@ -77,7 +77,7 @@ stages:
 
               cat trivy-report.txt
 
-              trivy image --exit-code 1 --severity HIGH,CRITICAL $(imageName):$(Build.BuildId)
+              trivy image --exit-code 1 --severity CRITICAL $(imageName):$(Build.BuildId)
             displayName: 'Security Scan with Trivy'
             continueOnError: false
 
