@@ -313,6 +313,13 @@ stages:
                 # Consider blue-green deployment here
                 - script: echo "Deploy to production"
                 - checkout: self
+                
+                - script: |
+                    sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/prod-deployment.yaml
+                    sed -i 's|#{ENVIRONMENT}#|production|g' k8s/prod-deployment.yaml
+                    sed -i 's|#{BUILD_NUMBER}#|$(Build.BuildId)|g' k8s/prod-deployment.yaml
+                  displayName: 'Replace tokens in manifests'
+                
                 # YOUR TASK: Deploy to AKS Production namespace
                 - task: Kubernetes@1
                   displayName: 'Deploy to AKS Production'
