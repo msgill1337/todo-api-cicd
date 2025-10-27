@@ -299,8 +299,8 @@ stages:
   # ========================================
   - stage: DeployProd
     displayName: 'Deploy to Production'
-    dependsOn: DeployStaging
-    condition: succeeded()
+    # dependsOn: DeployStaging
+    # condition: succeeded()
     jobs:
       - deployment: DeployProdJob
         displayName: 'Deploy to Production Environment'
