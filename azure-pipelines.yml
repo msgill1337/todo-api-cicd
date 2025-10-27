@@ -130,16 +130,30 @@ stages:
                     command: 'apply'
                     arguments: '-f k8s/'
 
-                - task: AzureCLI@2
-                  displayName: 'Set AKS Credentials'
+                - task: Kubernetes@1
+                  displayName: 'Setup kubectl context'
                   inputs:
-                    azureSubscription: 'azure-connection' # Replace with your service connection name
-                    scriptType: 'bash'
-                    scriptLocation: 'inlineScript'
-                    inlineScript: |
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'dev'
+                    command: 'login'
 
-                      az aks get-credentials --resource-group $(AKS_RESOURCE_GROUP) --name $(AKS_CLUSTER_NAME) --overwrite-existing
-                      kubectl config use-context $(kubectl config current-context)
+                - script: |
+                    # The Kubernetes task sets up kubectl, now it should work
+                    kubectl get pods -n dev
+                    
+                    # Your smoke tests
+                  displayName: 'Test - temp Smoke Tests'
+                # - task: AzureCLI@2
+                #   displayName: 'Set AKS Credentials'
+                #   inputs:
+                #     azureSubscription: 'azure-connection' # Replace with your service connection name
+                #     scriptType: 'bash'
+                #     scriptLocation: 'inlineScript'
+                #     inlineScript: |
+
+                #       az aks get-credentials --resource-group $(AKS_RESOURCE_GROUP) --name $(AKS_CLUSTER_NAME) --overwrite-existing
+                #       kubectl config use-context $(kubectl config current-context)
 
                 # YOUR TASK: Run smoke tests
                 - script: |
