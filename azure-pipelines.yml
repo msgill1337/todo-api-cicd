@@ -313,3 +313,119 @@ stages:
                 # Consider blue-green deployment here
                 - script: echo "Deploy to production"
                 - checkout: self
+                # YOUR TASK: Deploy to AKS Production namespace
+                - task: Kubernetes@1
+                  displayName: 'Deploy to AKS Production'
+                  inputs:
+                    # Configure kubectl deployment
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'todo-prod'
+                    command: 'apply'
+                    arguments: '-f k8s/prod-deployment.yaml'
+
+                - task: Kubernetes@1
+                  displayName: 'Setup kubectl context'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'dev'
+                    command: 'login'
+      
+                # Step 2: Wait for deployment to be ready
+                - task: Kubernetes@1
+                  displayName: 'Wait for deployment'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'prod'
+                    command: 'wait'
+                    arguments: '--for=condition=available --timeout=300s deployment/todo-api-new'
+
+
+                # YOUR TASK: Run smoke tests
+                - script: |
+                    echo "Testing blue/green deployment before switching traffic..."
+                    
+
+                    #Get the active slot 
+                    SLOT=$(kubectl get svc todo-api-service -n todo-prod -o jsonpath='{.spec.selector.version}')
+                    echo "SLOT $SLOT is active "
+                    
+                    if [ $SLOT -eq "blue" ] then
+                      $OTHER_SLOT = "green"
+                      kubectl port-forward -n todo-prod svc/todo-api-green-service 8080:80
+                      PF_PID=$!
+                      sleep 5
+                    else
+                      $OTHER_SLOT = "blue"
+                      kubectl port-forward -n todo-prod svc/todo-api-blue-service 8080:80
+                      PF_PID=$!
+                      sleep 5
+                    fi
+
+                    HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health
+
+                    if [ "$HEALTH" != "200" ]; then
+                      echo "❌ Green slot health check FAILED (status: $HEALTH)"
+                      echo "❌ NOT switching traffic. Green deployment has issues!"
+                      kill $PF_PID
+                      exit 1  # STOP HERE - don't switch traffic
+                    fi
+                    
+                    echo "✅ Green slot is healthy (status: 200)"
+                    
+                    # Additional API test
+                    API=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/todos)
+                    if [ "$API" != "200" ]; then
+                      echo "❌ Green slot API check FAILED (status: $API)"
+                      kill $PF_PID
+                      exit 1
+                    fi
+
+                    echo "✅ Green slot passed all tests"
+                    kill $PF_PID
+
+            
+                  displayName: 'Pre-Switch Health Check'
+                  continueOnError: false
+
+                - script: |
+                    echo "$OTHER_SLOT is healthy. Switching traffic from $SLOT to $OTHER_SLOT...."
+                    kubectl patch svc todo-api-service -n todo-prod -p '{"spec":{"selector":{"version":"$OTHER_SLOT"}}}'
+                    echo "✅ Traffic switched to $OTHER_SLOT!"
+                  displayName: 'Switch Traffic to healthy slot'
+
+                - script: |
+                    echo "Monitoring $OTHER_SLOT with production traffic...."
+                    SERVICE_IP=$(kubectl get svc todo-api-service -n todo-prod -o jsonpath='{.status.loadbalancer.ingress[0].ip}')
+
+                    #Monitor for 5 minutes
+                    FAILURES=0
+                    MAX_FAILURES=3
+
+                    for i in {1..30}; do
+                      sleep 10
+
+                      HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/health)
+
+                      if [ "$HEALTH" != "200" ]; then
+                        FAILURES=$((FAILURES + 1))
+                        echo "⚠️ Health check failed ($FAILURES/$MAX_FAILURES) - Status: $HEALTH"
+                        
+                        if [ $FAILURES -ge $MAX_FAILURES ]; then
+                          echo "❌ Too many failures! ROLLING BACK to blue..."
+                          kubectl patch svc todo-api-service -n prod -p '{"spec":{"selector":{"version":"$SLOT"}}}'
+                          echo "✅ Rolled back to blue slot"
+                          exit 1
+                        fi
+                      else
+                        echo "✅ Health check $i/30 passed"
+                        FAILURES=0  # Reset counter on success
+                      fi
+                    done
+
+                    echo "✅ $OTHER_SLOT slot is stable with production traffic!"
+                  displayName: Post-switch monitoring (Auto-rollback)
+                  continueOnError: false
+
