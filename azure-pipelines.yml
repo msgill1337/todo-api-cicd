@@ -364,13 +364,33 @@ stages:
                       OTHER_SLOT="blue"
                     fi
                     
-                    echo "Testing $OTHER_SLOT slot before switching..."
+                    # CRITICAL: Wait for the inactive deployment to be ready
+                    echo "Waiting for $OTHER_SLOT deployment to be ready..."
+                    kubectl wait --for=condition=available --timeout=300s deployment/todo-api-new -n todo-prod || {
+                      echo "❌ $OTHER_SLOT deployment is not ready!"
+                      exit 1
+                    }
                     
+                    # Check if pods are running
+                    kubectl get pods -n todo-prod -l app=todo-api,version=${OTHER_SLOT}
+                    
+                    echo "Testing $OTHER_SLOT slot before switching..." 
+
                     # Port forward to the inactive slot
+                    echo "Starting port-forward to $OTHER_SLOT..."
                     kubectl port-forward -n todo-prod svc/todo-api-${OTHER_SLOT}-service 8080:80 &
                     PF_PID=$!
+
                     sleep 20
                     
+                    if ! ps -p $PF_PID > /dev/null; then
+                      echo "❌ Port-forward failed to start!"
+                      exit 1
+                    fi
+
+                    echo "Port-forward established (PID: $PF_PID)"
+
+
                     # Test health endpoint
                     HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
                     
