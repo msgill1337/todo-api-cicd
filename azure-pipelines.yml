@@ -372,13 +372,13 @@ stages:
                     }
                     
                     # Check if pods are running
-                    kubectl get pods -n todo-prod -l app=todo-api,version=${OTHER_SLOT}
+                    kubectl get pods -n todo-prod -l app=todo-api,version=${SLOT}
                     
                     echo "Testing $OTHER_SLOT slot before switching..." 
 
                     # Port forward to the inactive slot
                     echo "Starting port-forward to $OTHER_SLOT..."
-                    kubectl port-forward -n todo-prod svc/todo-api-${OTHER_SLOT}-service 8080:80 &
+                    kubectl port-forward -n todo-prod svc/todo-api-new-service 8080:80 &
                     PF_PID=$!
 
                     sleep 20
