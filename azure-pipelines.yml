@@ -128,7 +128,7 @@ stages:
                     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
                     namespace: 'todo-dev'
                     command: 'apply'
-                    arguments: '-f k8s/'
+                    arguments: '-f k8s/deployment.yaml'
 
                 - task: Kubernetes@1
                   displayName: 'Setup kubectl context'
@@ -226,7 +226,7 @@ stages:
                     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
                     namespace: 'todo-staging'
                     command: 'apply'
-                    arguments: '-f k8s/'
+                    arguments: '-f k8s/deployment.yaml'
 
                 - task: Kubernetes@1
                   displayName: 'Setup kubectl context'
