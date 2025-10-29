@@ -121,7 +121,7 @@ stages:
 
                 # YOUR TASK: Deploy to AKS dev namespace
                 - task: Kubernetes@1
-                  displayName: 'Deploy to AKS Dev'
+                  displayName: 'Deploy new app to AKS Dev'
                   inputs:
                     # Configure kubectl deployment
                     connectionType: 'Kubernetes Service Connection'
@@ -129,6 +129,16 @@ stages:
                     namespace: 'todo-dev'
                     command: 'apply'
                     arguments: '-f k8s/deployment.yaml'
+
+                - task: Kubernetes@1
+                  displayName: 'Deploy services to AKS Dev'
+                  inputs:
+                    # Configure kubectl deployment
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'todo-dev'
+                    command: 'apply'
+                    arguments: '-f k8s/service.yaml'
 
                 - task: Kubernetes@1
                   displayName: 'Setup kubectl context'
@@ -219,7 +229,7 @@ stages:
 
                 # YOUR TASK: Deploy to AKS Staging namespace
                 - task: Kubernetes@1
-                  displayName: 'Deploy to AKS Staging'
+                  displayName: 'Deploy app to AKS Staging'
                   inputs:
                     # Configure kubectl deployment
                     connectionType: 'Kubernetes Service Connection'
@@ -227,6 +237,16 @@ stages:
                     namespace: 'todo-staging'
                     command: 'apply'
                     arguments: '-f k8s/deployment.yaml'
+
+                - task: Kubernetes@1
+                  displayName: 'Deploy services to AKS Staging'
+                  inputs:
+                    # Configure kubectl deployment
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'todo-staging'
+                    command: 'apply'
+                    arguments: '-f k8s/service.yaml'
 
                 - task: Kubernetes@1
                   displayName: 'Setup kubectl context'
