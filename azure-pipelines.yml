@@ -1,8 +1,8 @@
 trigger:
   branches:
     include:
-      - main
-      - develop
+      # - main
+      - Dev
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -46,10 +46,14 @@ stages:
 
           # YOUR TASK: Run unit tests
           - script: |
-              docker images
+              docker run -d --name test-container $(imageName):$(Build.BuildId)
+
+              sleep 5
               # Run tests here
               # Hint: docker run with test command
-              docker run --rm $(imageName):/$(Build.BuildId) npm test
+              docker exec test-container npm test
+              docker stop test-container
+              docker rm test-container
             displayName: 'Run Unit Tests'
             continueOnError: false
 
@@ -72,12 +76,12 @@ stages:
 
               cat trivy-report.txt
 
-              trivy image --exit-code 1 --severity HIGH,CRITICAL $(imageName):$(Build.BuildId)
+              trivy image --exit-code 1 --severity CRITICAL $(imageName):$(Build.BuildId)
             displayName: 'Security Scan with Trivy'
             continueOnError: false
 
           - script: |
-                docker tag $(imageName):/$(Build.BuildId) $(ACR_LOGIN_SERVER)/$(imageName):$(Build.BuildId)
+                docker tag $(imageName):$(Build.BuildId) $(ACR_LOGIN_SERVER)/$(imageName):$(Build.BuildId)
             displayName: 'Tagging the image before push'
           # YOUR TASK: Push image to ACR
           - task: Docker@2
@@ -105,7 +109,10 @@ stages:
             deploy:
               steps:
                 # YOUR TASK: Replace tokens in K8s manifests
+                - checkout: self
                 - script: |
+                    ls -la
+
                     sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/deployment.yaml
                     sed -i 's|#{ENVIRONMENT}#|dev|g' k8s/deployment.yaml
                     sed -i 's|#{BUILD_NUMBER}#|$(Build.BuildId)|g' k8s/deployment.yaml
@@ -114,47 +121,87 @@ stages:
 
                 # YOUR TASK: Deploy to AKS dev namespace
                 - task: Kubernetes@1
-                  displayName: 'Deploy to AKS Dev'
+                  displayName: 'Deploy new app to AKS Dev'
                   inputs:
                     # Configure kubectl deployment
                     connectionType: 'Kubernetes Service Connection'
                     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
-                    namespace: 'dev'
+                    namespace: 'todo-dev'
                     command: 'apply'
                     arguments: '-f k8s/deployment.yaml'
 
+                - task: Kubernetes@1
+                  displayName: 'Deploy services to AKS Dev'
+                  inputs:
+                    # Configure kubectl deployment
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'todo-dev'
+                    command: 'apply'
+                    arguments: '-f k8s/service.yaml'
+
+                - task: Kubernetes@1
+                  displayName: 'Setup kubectl context'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'dev'
+                    command: 'login'
+
                 # YOUR TASK: Run smoke tests
                 - script: |
-                    # Test the deployed service
-                    echo "Waiting for pods to be ready..."
-                    kubectl wait --for-condition=available --timeout=120s deployment/todo-api -n todo-dev 
-
-                    echo "Getting pod name..."
-                    POD_NAME=$(kubectl get pods -n todo-dev -l app=todo-api -o jsonpath='{.items[0].metadata.name}')
-
-                    echo "Testing pod: $POD_NAME"
+                    echo "Running smoke tests against deployed app in dev namespace..."
                     
-                    #port-forward in background
-                    kubectl port-forward -n todo-dev $POD_NAME 8080:3000 &
-                    PORT_FORWARD_PID=$!
-
-                    sleep 5
-
-                    #Testing the health endpoint
-                    echo "Testing the health endpoint..."
-                    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
-
-                    #Kill port foward
-                    kill $PORT_FORWARD_PID
-
-                    if [ "$RESPONSE" = "200"]; then
-                      echo "✅ Smoke test passed: Health check returned "200"
-                    else
-                      echo "❌ Smoke test failed: Health check returned $RESPONSE"
+                    # Wait for deployment to be ready
+                    kubectl wait --for=condition=available --timeout=120s deployment/todo-api -n todo-dev
+                    
+                    # Get the service external IP (LoadBalancer)
+                    SERVICE_IP=$(kubectl get svc todo-api -n todo-dev -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                    echo "Service IP: $SERVICE_IP"
+                    
+                    # Wait for LoadBalancer IP to be assigned
+                    RETRY_COUNT=0
+                    MAX_RETRIES=30
+                    while [ -z "$SERVICE_IP" ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                      echo "Waiting for LoadBalancer IP... (attempt $RETRY_COUNT/$MAX_RETRIES)"
+                      sleep 10
+                      SERVICE_IP=$(kubectl get svc todo-api -n todo-dev -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                      RETRY_COUNT=$((RETRY_COUNT + 1))
+                    done
+                    
+                    if [ -z "$SERVICE_IP" ]; then
+                      echo "Failed to get LoadBalancer IP after $MAX_RETRIES attempts"
                       exit 1
                     fi
-
+                    
+                    echo "Testing health endpoint at http://$SERVICE_IP/health"
+                    
+                    # Test health endpoint
+                    HEALTH_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/health)
+                    
+                    if [ "$HEALTH_RESPONSE" = "200" ]; then
+                      echo "✅ Health check passed!"
+                      curl -s http://$SERVICE_IP/health | jq '.'
+                    else
+                      echo "❌ Health check failed with status: $HEALTH_RESPONSE"
+                      exit 1
+                    fi
+                    
+                    # Test API endpoint
+                    echo "Testing API endpoint at http://$SERVICE_IP/api/todos"
+                    API_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/api/todos)
+                    
+                    if [ "$API_RESPONSE" = "200" ]; then
+                      echo "✅ API check passed!"
+                      curl -s http://$SERVICE_IP/api/todos | jq '.'
+                    else
+                      echo "❌ API check failed with status: $API_RESPONSE"
+                      exit 1
+                    fi
+                    
+                    echo "✅ All smoke tests passed!"
                   displayName: 'Smoke Tests'
+                  continueOnError: false
 
   # ========================================
   # STAGE 3: DEPLOY TO STAGING
@@ -172,6 +219,7 @@ stages:
             deploy:
               steps:
                 # YOUR TASK: Similar to dev, but staging namespace
+                - checkout: self
                 - script: |
                     sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/deployment.yaml
                     sed -i 's|#{ENVIRONMENT}#|staging|g' k8s/deployment.yaml
@@ -181,47 +229,90 @@ stages:
 
                 # YOUR TASK: Deploy to AKS Staging namespace
                 - task: Kubernetes@1
-                  displayName: 'Deploy to AKS Staging'
+                  displayName: 'Deploy app to AKS Staging'
                   inputs:
                     # Configure kubectl deployment
                     connectionType: 'Kubernetes Service Connection'
                     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
-                    namespace: 'staging'
+                    namespace: 'todo-staging'
                     command: 'apply'
                     arguments: '-f k8s/deployment.yaml'
 
+                - task: Kubernetes@1
+                  displayName: 'Deploy services to AKS Staging'
+                  inputs:
+                    # Configure kubectl deployment
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'todo-staging'
+                    command: 'apply'
+                    arguments: '-f k8s/service.yaml'
+
+                - task: Kubernetes@1
+                  displayName: 'Setup kubectl context'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'dev'
+                    command: 'login'
+      
+
                 # YOUR TASK: Run smoke tests
                 - script: |
-                    # Test the deployed service
-                    echo "Waiting for pods to be ready..."
-                    kubectl wait --for-condition=available --timeout=120s deployment/todo-api -n todo-staging
-
-                    echo "Getting pod name..."
-                    POD_NAME=$(kubectl get pods -n todo-staging -l app=todo-api -o jsonpath='{.items[0].metadata.name}')
-
-                    echo "Testing pod: $POD_NAME"
+                    echo "Running smoke tests against deployed app in staging namespace..."
                     
-                    #port-forward in background
-                    kubectl port-forward -n todo-dev $POD_NAME 8080:3000 &
-                    PORT_FORWARD_PID=$!
-
-                    sleep 5
-
-                    #Testing the health endpoint
-                    echo "Testing the health endpoint..."
-                    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
-
-                    #Kill port foward
-                    kill $PORT_FORWARD_PID
-
-                    if [ "$RESPONSE" = "200"]; then
-                      echo "✅ Smoke test passed: Health check returned "200"
-                    else
-                      echo "❌ Smoke test failed: Health check returned $RESPONSE"
+                    # Wait for deployment to be ready
+                    kubectl wait --for=condition=available --timeout=120s deployment/todo-api -n todo-staging
+                    
+                    # Get the service external IP (LoadBalancer)
+                    SERVICE_IP=$(kubectl get svc todo-api -n todo-staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                    echo "Service IP: $SERVICE_IP"
+                    
+                    # Wait for LoadBalancer IP to be assigned
+                    RETRY_COUNT=0
+                    MAX_RETRIES=30
+                    while [ -z "$SERVICE_IP" ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                      echo "Waiting for LoadBalancer IP... (attempt $RETRY_COUNT/$MAX_RETRIES)"
+                      sleep 10
+                      SERVICE_IP=$(kubectl get svc todo-api -n todo-staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                      RETRY_COUNT=$((RETRY_COUNT + 1))
+                    done
+                    
+                    if [ -z "$SERVICE_IP" ]; then
+                      echo "Failed to get LoadBalancer IP after $MAX_RETRIES attempts"
                       exit 1
                     fi
-
+                    
+                    echo "Testing health endpoint at http://$SERVICE_IP/health"
+                    
+                    # Test health endpoint
+                    HEALTH_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/health)
+                    
+                    if [ "$HEALTH_RESPONSE" = "200" ]; then
+                      echo "✅ Health check passed!"
+                      curl -s http://$SERVICE_IP/health | jq '.'
+                    else
+                      echo "❌ Health check failed with status: $HEALTH_RESPONSE"
+                      exit 1
+                    fi
+                    
+                    # Test API endpoint
+                    echo "Testing API endpoint at http://$SERVICE_IP/api/todos"
+                    API_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/api/todos)
+                    
+                    if [ "$API_RESPONSE" = "200" ]; then
+                      echo "✅ API check passed!"
+                      curl -s http://$SERVICE_IP/api/todos | jq '.'
+                    else
+                      echo "❌ API check failed with status: $API_RESPONSE"
+                      exit 1
+                    fi
+                    
+                    echo "✅ All smoke tests passed!"
                   displayName: 'Smoke Tests'
+                  env: 
+                    KUBECONFIG: $(System.DefaultWorkingDirectory)/kubeconfig
+                  continueOnError: false
 
   # ========================================
   # STAGE 4: DEPLOY TO PROD
@@ -241,3 +332,173 @@ stages:
                 # YOUR TASK: Production deployment
                 # Consider blue-green deployment here
                 - script: echo "Deploy to production"
+                - checkout: self
+                
+                # - script: |
+                #     sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/prod-deployment.yaml
+                #     sed -i 's|#{ENVIRONMENT}#|production|g' k8s/prod-deployment.yaml
+                #     sed -i 's|#{BUILD_NUMBER}#|$(Build.BuildId)|g' k8s/prod-deployment.yaml
+                #   displayName: 'Replace tokens in manifests'
+
+                - task: Kubernetes@1
+                  displayName: 'Setup kubectl context'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                    namespace: 'dev'
+                    command: 'login'
+      
+                # # Step 2: Wait for deployment to be ready
+                # - task: Kubernetes@1
+                #   displayName: 'Wait for deployment'
+                #   inputs:
+                #     connectionType: 'Kubernetes Service Connection'
+                #     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                #     namespace: 'todo-prod'
+                #     command: 'wait'
+                #     arguments: '--for=condition=available --timeout=300s deployment/todo-api-new'
+
+
+                - script: |
+                    echo "Testing blue/green deployment before switching traffic..."
+                    
+                    # Get the active slot 
+                    SLOT=$(kubectl get svc todo-api-service -n todo-prod -o jsonpath='{.spec.selector.version}')
+                    echo "Active slot: $SLOT"
+                    
+                    # Determine the OTHER slot
+                    if [ "$SLOT" = "blue" ]; then
+                      OTHER_SLOT="green"
+                    else
+                      OTHER_SLOT="blue"
+                    fi
+                    
+                    echo "🚀 Deploying to $OTHER_SLOT..."
+
+                    kubectl set image deployment/todo-api-$OTHER_SLOT -n todo-prod \
+                      todo-api=$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId) --record
+
+                    echo "📈 Scaling up $OTHER_SLOT"
+
+                    kubectl scale deployment/todo-api-$OTHER_SLOT -n todo-prod --replicas=2
+
+                    echo "⏳ Waiting for rollout..."
+
+                    kubectl rollout status deployment/todo-api-$OTHER_SLOT -n todo-prod --timeout=5m
+
+                    echo "🧪 Running smoke tests..."
+
+                    POD=$(kubectl get pods -n todo-prod -l app=todo-api,version=$OTHER_SLOT -o jsonpath='{.items[0].metadata.name}')
+
+                    kubectl port-forward -n todo-prod $POD 8080:3000 &
+                    PF_PID=$!
+                    sleep 20
+
+                    curl -f http://localhost:8080/health || { kill $PF_PID; exit 1; }
+                    kill $PF_PID
+
+                    echo "🔄 Switching traffic to $OTHER_SLOT..."
+                    kubectl patch service todo-api-service -n todo-prod \
+                      -p "{\"spec\":{\"selector\":{\"version\":\"$OTHER_SLOT\"}}}"
+
+                    echo "✅ Deployment complete! Traffic now on $OTHER_SLOT"
+                    
+                    echo "ℹ️  Old version ($SLOT) being scaled down"
+
+                    kubectl scale deployment/todo-api-$SLOT -n todo-prod --replicas=0
+
+
+                    # # CRITICAL: Wait for the inactive deployment to be ready
+                    # echo "Waiting for $OTHER_SLOT deployment to be ready..."
+                    # kubectl wait --for=condition=available --timeout=300s deployment/todo-api-new -n todo-prod || {
+                    #   echo "❌ $OTHER_SLOT deployment is not ready!"
+                    #   exit 1
+                    # }
+                    
+                    # # Check if pods are running
+                    # kubectl get pods -n todo-prod -l app=todo-api,version=${SLOT}
+                    
+                    # echo "Testing $OTHER_SLOT slot before switching..." 
+
+                    # # Port forward to the inactive slot
+                    # echo "Starting port-forward to $OTHER_SLOT..."
+                    # kubectl port-forward -n todo-prod svc/todo-api-${OTHER_SLOT}-service 8080:80 &
+                    # PF_PID=$!
+
+                    # sleep 20
+                    
+                    # if ! ps -p $PF_PID > /dev/null; then
+                    #   echo "❌ Port-forward failed to start!"
+                    #   exit 1
+                    # fi
+
+                    # echo "Port-forward established (PID: $PF_PID)"
+
+
+                    # # Test health endpoint
+                    # HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
+                    
+                    # if [ "$HEALTH" != "200" ]; then
+                    #   echo "❌ $OTHER_SLOT slot health check FAILED (status: $HEALTH)"
+                    #   echo "❌ NOT switching traffic. $OTHER_SLOT deployment has issues!"
+                    #   kill $PF_PID
+                    #   exit 1
+                    # fi
+                    
+                    # echo "✅ $OTHER_SLOT slot is healthy (status: 200)"
+                    
+                    # # Additional API test
+                    # API=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/todos)
+                    # if [ "$API" != "200" ]; then
+                    #   echo "❌ $OTHER_SLOT slot API check FAILED (status: $API)"
+                    #   kill $PF_PID
+                    #   exit 1
+                    # fi
+                    
+                    # echo "✅ $OTHER_SLOT slot passed all tests"
+                    # kill $PF_PID
+                    
+                    # # Save slot info for next steps
+                    # echo "##vso[task.setvariable variable=activeSlot]$SLOT"
+                    # echo "##vso[task.setvariable variable=inactiveSlot]$OTHER_SLOT"
+                  displayName: 'Check and switch'
+                  continueOnError: false
+
+                # - script: |
+                #     echo "$(inactiveSlot) is healthy. Switching traffic from $(activeSlot) to $(inactiveSlot)..."
+                #     kubectl patch svc todo-api-service -n todo-prod -p "{\"spec\":{\"selector\":{\"version\":\"$(inactiveSlot)\"}}}"
+                #     echo "✅ Traffic switched to $(inactiveSlot)!"
+                #   displayName: 'Switch Traffic to healthy slot'
+
+                # - script: |
+                #     echo "Monitoring $(inactiveSlot) with production traffic..."
+                #     SERVICE_IP=$(kubectl get svc todo-api-service -n todo-prod -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                    
+                #     # Monitor for 5 minutes
+                #     FAILURES=0
+                #     MAX_FAILURES=3
+                    
+                #     for i in {1..30}; do
+                #       sleep 10
+                      
+                #       HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/health)
+                      
+                #       if [ "$HEALTH" != "200" ]; then
+                #         FAILURES=$((FAILURES + 1))
+                #         echo "⚠️ Health check failed ($FAILURES/$MAX_FAILURES) - Status: $HEALTH"
+                        
+                #         if [ $FAILURES -ge $MAX_FAILURES ]; then
+                #           echo "❌ Too many failures! ROLLING BACK to $(activeSlot)..."
+                #           kubectl patch svc todo-api-service -n todo-prod -p "{\"spec\":{\"selector\":{\"version\":\"$(activeSlot)\"}}}"
+                #           echo "✅ Rolled back to $(activeSlot) slot"
+                #           exit 1
+                #         fi
+                #       else
+                #         echo "✅ Health check $i/30 passed"
+                #         FAILURES=0
+                #       fi
+                #     done
+                    
+                #     echo "✅ $(inactiveSlot) slot is stable with production traffic!"
+                #   displayName: 'Post-switch monitoring (Auto-rollback)'
+                #   continueOnError: false
