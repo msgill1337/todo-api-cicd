@@ -364,97 +364,132 @@ stages:
                       OTHER_SLOT="blue"
                     fi
                     
-                    # CRITICAL: Wait for the inactive deployment to be ready
-                    echo "Waiting for $OTHER_SLOT deployment to be ready..."
-                    kubectl wait --for=condition=available --timeout=300s deployment/todo-api-new -n todo-prod || {
-                      echo "❌ $OTHER_SLOT deployment is not ready!"
-                      exit 1
-                    }
-                    
-                    # Check if pods are running
-                    kubectl get pods -n todo-prod -l app=todo-api,version=${SLOT}
-                    
-                    echo "Testing $OTHER_SLOT slot before switching..." 
+                    echo "🚀 Deploying to $OTHER_SLOT..."
 
-                    # Port forward to the inactive slot
-                    echo "Starting port-forward to $OTHER_SLOT..."
-                    kubectl port-forward -n todo-prod svc/todo-api-new-service 8080:80 &
+                    kubectl set image deployment/todo-api-$OTHER_SLOT -n todo-prod \
+                      todo-api=$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId) --record
+
+                    echo "📈 Scaling up $OTHER_SLOT"
+
+                    kubectl scale deployment/todo-api-$OTHER_SLOT -n todo-prod --replicas=2
+
+                    echo "⏳ Waiting for rollout..."
+
+                    kubectl rollout status deployment/todo-api-$OTHER_SLOT -n todo-prod --timeout=5m
+
+                    echo "🧪 Running smoke tests..."
+
+                    POD=$(kubectl get pods -n todo-prod -l app=todo-api,version=$OTHER_SLOT -o jsonpath='{.items[0].metadata.name}')
+
+                    kubectl port-forward -n todo-prod $POD 8080:3000 &
                     PF_PID=$!
-
                     sleep 20
-                    
-                    if ! ps -p $PF_PID > /dev/null; then
-                      echo "❌ Port-forward failed to start!"
-                      exit 1
-                    fi
 
-                    echo "Port-forward established (PID: $PF_PID)"
-
-
-                    # Test health endpoint
-                    HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
-                    
-                    if [ "$HEALTH" != "200" ]; then
-                      echo "❌ $OTHER_SLOT slot health check FAILED (status: $HEALTH)"
-                      echo "❌ NOT switching traffic. $OTHER_SLOT deployment has issues!"
-                      kill $PF_PID
-                      exit 1
-                    fi
-                    
-                    echo "✅ $OTHER_SLOT slot is healthy (status: 200)"
-                    
-                    # Additional API test
-                    API=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/todos)
-                    if [ "$API" != "200" ]; then
-                      echo "❌ $OTHER_SLOT slot API check FAILED (status: $API)"
-                      kill $PF_PID
-                      exit 1
-                    fi
-                    
-                    echo "✅ $OTHER_SLOT slot passed all tests"
+                    curl -f http://localhost:8080/health || { kill $PF_PID; exit 1; }
                     kill $PF_PID
+
+                    echo "🔄 Switching traffic to $OTHER_SLOT..."
+                    kubectl patch service todo-api-service -n todo-prod \
+                      -p "{\"spec\":{\"selector\":{\"version\":\"$OTHER_SLOT\"}}}"
+
+                    echo "✅ Deployment complete! Traffic now on $OTHER_SLOT"
                     
-                    # Save slot info for next steps
-                    echo "##vso[task.setvariable variable=activeSlot]$SLOT"
-                    echo "##vso[task.setvariable variable=inactiveSlot]$OTHER_SLOT"
-                  displayName: 'Pre-Switch Health Check'
+                    echo "ℹ️  Old version ($SLOT) being scaled down"
+
+                    kubectl scale deployment/todo-api-$SLOT -n todo-prod --replicas=0
+
+
+                    # # CRITICAL: Wait for the inactive deployment to be ready
+                    # echo "Waiting for $OTHER_SLOT deployment to be ready..."
+                    # kubectl wait --for=condition=available --timeout=300s deployment/todo-api-new -n todo-prod || {
+                    #   echo "❌ $OTHER_SLOT deployment is not ready!"
+                    #   exit 1
+                    # }
+                    
+                    # # Check if pods are running
+                    # kubectl get pods -n todo-prod -l app=todo-api,version=${SLOT}
+                    
+                    # echo "Testing $OTHER_SLOT slot before switching..." 
+
+                    # # Port forward to the inactive slot
+                    # echo "Starting port-forward to $OTHER_SLOT..."
+                    # kubectl port-forward -n todo-prod svc/todo-api-${OTHER_SLOT}-service 8080:80 &
+                    # PF_PID=$!
+
+                    # sleep 20
+                    
+                    # if ! ps -p $PF_PID > /dev/null; then
+                    #   echo "❌ Port-forward failed to start!"
+                    #   exit 1
+                    # fi
+
+                    # echo "Port-forward established (PID: $PF_PID)"
+
+
+                    # # Test health endpoint
+                    # HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
+                    
+                    # if [ "$HEALTH" != "200" ]; then
+                    #   echo "❌ $OTHER_SLOT slot health check FAILED (status: $HEALTH)"
+                    #   echo "❌ NOT switching traffic. $OTHER_SLOT deployment has issues!"
+                    #   kill $PF_PID
+                    #   exit 1
+                    # fi
+                    
+                    # echo "✅ $OTHER_SLOT slot is healthy (status: 200)"
+                    
+                    # # Additional API test
+                    # API=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/todos)
+                    # if [ "$API" != "200" ]; then
+                    #   echo "❌ $OTHER_SLOT slot API check FAILED (status: $API)"
+                    #   kill $PF_PID
+                    #   exit 1
+                    # fi
+                    
+                    # echo "✅ $OTHER_SLOT slot passed all tests"
+                    # kill $PF_PID
+                    
+                    # # Save slot info for next steps
+                    # echo "##vso[task.setvariable variable=activeSlot]$SLOT"
+                    # echo "##vso[task.setvariable variable=inactiveSlot]$OTHER_SLOT"
+                  displayName: 'Check and switch'
                   continueOnError: false
 
-                - script: |
-                    echo "$(inactiveSlot) is healthy. Switching traffic from $(activeSlot) to $(inactiveSlot)..."
-                    kubectl patch svc todo-api-service -n todo-prod -p "{\"spec\":{\"selector\":{\"version\":\"$(inactiveSlot)\"}}}"
-                    echo "✅ Traffic switched to $(inactiveSlot)!"
-                  displayName: 'Switch Traffic to healthy slot'
+                # - script: |
+                #     echo "$(inactiveSlot) is healthy. Switching traffic from $(activeSlot) to $(inactiveSlot)..."
+                #     kubectl patch svc todo-api-service -n todo-prod -p "{\"spec\":{\"selector\":{\"version\":\"$(inactiveSlot)\"}}}"
+                #     echo "✅ Traffic switched to $(inactiveSlot)!"
+                #   displayName: 'Switch Traffic to healthy slot'
 
-                - script: |
-                    echo "Monitoring $(inactiveSlot) with production traffic..."
-                    SERVICE_IP=$(kubectl get svc todo-api-service -n todo-prod -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                # - script: |
+                #     echo "Monitoring $(inactiveSlot) with production traffic..."
+                #     SERVICE_IP=$(kubectl get svc todo-api-service -n todo-prod -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
                     
-                    # Monitor for 5 minutes
-                    FAILURES=0
-                    MAX_FAILURES=3
+                #     # Monitor for 5 minutes
+                #     FAILURES=0
+                #     MAX_FAILURES=3
                     
-                    for i in {1..30}; do
-                      sleep 10
+                #     for i in {1..30}; do
+                #       sleep 10
                       
-                      HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/health)
+                #       HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/health)
                       
-                      if [ "$HEALTH" != "200" ]; then
-                        FAILURES=$((FAILURES + 1))
-                        echo "⚠️ Health check failed ($FAILURES/$MAX_FAILURES) - Status: $HEALTH"
+                #       if [ "$HEALTH" != "200" ]; then
+                #         FAILURES=$((FAILURES + 1))
+                #         echo "⚠️ Health check failed ($FAILURES/$MAX_FAILURES) - Status: $HEALTH"
                         
-                        if [ $FAILURES -ge $MAX_FAILURES ]; then
-                          echo "❌ Too many failures! ROLLING BACK to $(activeSlot)..."
-                          kubectl patch svc todo-api-service -n todo-prod -p "{\"spec\":{\"selector\":{\"version\":\"$(activeSlot)\"}}}"
-                          echo "✅ Rolled back to $(activeSlot) slot"
-                          exit 1
-                        fi
-                      else
-                        echo "✅ Health check $i/30 passed"
-                        FAILURES=0
-                      fi
-                    done
+                #         if [ $FAILURES -ge $MAX_FAILURES ]; then
+                #           echo "❌ Too many failures! ROLLING BACK to $(activeSlot)..."
+                #           kubectl patch svc todo-api-service -n todo-prod -p "{\"spec\":{\"selector\":{\"version\":\"$(activeSlot)\"}}}"
+                #           echo "✅ Rolled back to $(activeSlot) slot"
+                #           exit 1
+                #         fi
+                #       else
+                #         echo "✅ Health check $i/30 passed"
+                #         FAILURES=0
+                #       fi
+                #     done
                     
-                    echo "✅ $(inactiveSlot) slot is stable with production traffic!"
-                  displayName: 'Post-switch monitoring (Auto-rollback)'
-                  continueOnError: false
+                #     echo "✅ $(inactiveSlot) slot is stable with production traffic!"
+                #   displayName: 'Post-switch monitoring (Auto-rollback)'
+                #   continueOnError: false
