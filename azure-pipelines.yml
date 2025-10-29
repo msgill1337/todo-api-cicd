@@ -314,22 +314,11 @@ stages:
                 - script: echo "Deploy to production"
                 - checkout: self
                 
-                - script: |
-                    sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/prod-deployment.yaml
-                    sed -i 's|#{ENVIRONMENT}#|production|g' k8s/prod-deployment.yaml
-                    sed -i 's|#{BUILD_NUMBER}#|$(Build.BuildId)|g' k8s/prod-deployment.yaml
-                  displayName: 'Replace tokens in manifests'
-                
-                # YOUR TASK: Deploy to AKS Production namespace
-                - task: Kubernetes@1
-                  displayName: 'Deploy to AKS Production'
-                  inputs:
-                    # Configure kubectl deployment
-                    connectionType: 'Kubernetes Service Connection'
-                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
-                    namespace: 'todo-prod'
-                    command: 'apply'
-                    arguments: '-f k8s/prod-deployment.yaml'
+                # - script: |
+                #     sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/prod-deployment.yaml
+                #     sed -i 's|#{ENVIRONMENT}#|production|g' k8s/prod-deployment.yaml
+                #     sed -i 's|#{BUILD_NUMBER}#|$(Build.BuildId)|g' k8s/prod-deployment.yaml
+                #   displayName: 'Replace tokens in manifests'
 
                 - task: Kubernetes@1
                   displayName: 'Setup kubectl context'
@@ -339,15 +328,15 @@ stages:
                     namespace: 'dev'
                     command: 'login'
       
-                # Step 2: Wait for deployment to be ready
-                - task: Kubernetes@1
-                  displayName: 'Wait for deployment'
-                  inputs:
-                    connectionType: 'Kubernetes Service Connection'
-                    kubernetesServiceEndpoint: '$(k8sServiceConnection)'
-                    namespace: 'todo-prod'
-                    command: 'wait'
-                    arguments: '--for=condition=available --timeout=300s deployment/todo-api-new'
+                # # Step 2: Wait for deployment to be ready
+                # - task: Kubernetes@1
+                #   displayName: 'Wait for deployment'
+                #   inputs:
+                #     connectionType: 'Kubernetes Service Connection'
+                #     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
+                #     namespace: 'todo-prod'
+                #     command: 'wait'
+                #     arguments: '--for=condition=available --timeout=300s deployment/todo-api-new'
 
 
                 - script: |
