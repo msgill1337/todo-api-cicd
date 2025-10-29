@@ -8,11 +8,11 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  - group: todo-api-variables  # You'll create this
+  - group: todo-api-variables
   - name: buildNumber
     value: '$(Build.BuildNumber)'
   - name: acrName
-    value: 'acrprod01mg1337'  # Replace with your ACR name
+    value: 'acrprod01mg1337'
   - name: imageName
     value: 'todo-api'
   - name: dockerConnectionName
@@ -29,11 +29,8 @@ stages:
     jobs:
       - job: BuildJob
         displayName: 'Build Docker Image'
-        steps:
-          # YOUR TASK: Checkout code
-          - checkout: self
-
-          # YOUR TASK: Build Docker image
+        steps:      
+          - checkout: self         
           - task: Docker@2
             displayName: 'Build Docker Image'
             inputs:
@@ -41,24 +38,15 @@ stages:
                 Dockerfile: 'Dockerfile'
                 repository: '$(imageName)'
                 tags: '$(Build.BuildId)'
-              # Fill in the Docker task parameters
-              # Hint: command, repository, dockerfile, tags
-
-          # YOUR TASK: Run unit tests
           - script: |
               docker run -d --name test-container $(imageName):$(Build.BuildId)
-
               sleep 5
-              # Run tests here
-              # Hint: docker run with test command
               docker exec test-container npm test
               docker stop test-container
               docker rm test-container
             displayName: 'Run Unit Tests'
             continueOnError: false
 
-
-          # YOUR TASK: Scan image with Trivy
           - script: |
               # Install and run Trivy
               # Scan for vulnerabilities
@@ -83,7 +71,7 @@ stages:
           - script: |
                 docker tag $(imageName):$(Build.BuildId) $(ACR_LOGIN_SERVER)/$(imageName):$(Build.BuildId)
             displayName: 'Tagging the image before push'
-          # YOUR TASK: Push image to ACR
+
           - task: Docker@2
             displayName: 'Push to ACR'
             inputs:
@@ -91,7 +79,7 @@ stages:
               containerRegistry: '$(dockerConnectionName)'
               repository: '$(imageName)'
               tags: '$(Build.BuildId)'
-              # Fill in push parameters
+
 
   # ========================================
   # STAGE 2: DEPLOY TO DEV
@@ -108,7 +96,6 @@ stages:
           runOnce:
             deploy:
               steps:
-                # YOUR TASK: Replace tokens in K8s manifests
                 - checkout: self
                 - script: |
                     ls -la
@@ -119,11 +106,9 @@ stages:
                   displayName: 'Replace tokens in manifests'
                 
 
-                # YOUR TASK: Deploy to AKS dev namespace
                 - task: Kubernetes@1
                   displayName: 'Deploy new app to AKS Dev'
                   inputs:
-                    # Configure kubectl deployment
                     connectionType: 'Kubernetes Service Connection'
                     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
                     namespace: 'todo-dev'
@@ -133,7 +118,6 @@ stages:
                 - task: Kubernetes@1
                   displayName: 'Deploy services to AKS Dev'
                   inputs:
-                    # Configure kubectl deployment
                     connectionType: 'Kubernetes Service Connection'
                     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
                     namespace: 'todo-dev'
@@ -148,7 +132,6 @@ stages:
                     namespace: 'dev'
                     command: 'login'
 
-                # YOUR TASK: Run smoke tests
                 - script: |
                     echo "Running smoke tests against deployed app in dev namespace..."
                     
@@ -213,12 +196,11 @@ stages:
     jobs:
       - deployment: DeployStagingJob
         displayName: 'Deploy to Staging Environment'
-        environment: 'staging'  # Manual approval configured here
+        environment: 'staging' 
         strategy:
           runOnce:
             deploy:
               steps:
-                # YOUR TASK: Similar to dev, but staging namespace
                 - checkout: self
                 - script: |
                     sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/deployment.yaml
@@ -227,11 +209,9 @@ stages:
                   displayName: 'Replace tokens in manifests'
                 
 
-                # YOUR TASK: Deploy to AKS Staging namespace
                 - task: Kubernetes@1
                   displayName: 'Deploy app to AKS Staging'
                   inputs:
-                    # Configure kubectl deployment
                     connectionType: 'Kubernetes Service Connection'
                     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
                     namespace: 'todo-staging'
@@ -241,7 +221,6 @@ stages:
                 - task: Kubernetes@1
                   displayName: 'Deploy services to AKS Staging'
                   inputs:
-                    # Configure kubectl deployment
                     connectionType: 'Kubernetes Service Connection'
                     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
                     namespace: 'todo-staging'
@@ -256,8 +235,6 @@ stages:
                     namespace: 'dev'
                     command: 'login'
       
-
-                # YOUR TASK: Run smoke tests
                 - script: |
                     echo "Running smoke tests against deployed app in staging namespace..."
                     
@@ -324,22 +301,14 @@ stages:
     jobs:
       - deployment: DeployProdJob
         displayName: 'Deploy to Production Environment'
-        environment: 'production'  # Manual approval required
+        environment: 'production' 
         strategy:
           runOnce:
             deploy:
               steps:
-                # YOUR TASK: Production deployment
-                # Consider blue-green deployment here
-                - script: echo "Deploy to production"
-                - checkout: self
-                
-                # - script: |
-                #     sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/prod-deployment.yaml
-                #     sed -i 's|#{ENVIRONMENT}#|production|g' k8s/prod-deployment.yaml
-                #     sed -i 's|#{BUILD_NUMBER}#|$(Build.BuildId)|g' k8s/prod-deployment.yaml
-                #   displayName: 'Replace tokens in manifests'
 
+                - script: echo "Deploy to production"
+                - checkout: self             
                 - task: Kubernetes@1
                   displayName: 'Setup kubectl context'
                   inputs:
@@ -348,17 +317,6 @@ stages:
                     namespace: 'dev'
                     command: 'login'
       
-                # # Step 2: Wait for deployment to be ready
-                # - task: Kubernetes@1
-                #   displayName: 'Wait for deployment'
-                #   inputs:
-                #     connectionType: 'Kubernetes Service Connection'
-                #     kubernetesServiceEndpoint: '$(k8sServiceConnection)'
-                #     namespace: 'todo-prod'
-                #     command: 'wait'
-                #     arguments: '--for=condition=available --timeout=300s deployment/todo-api-new'
-
-
                 - script: |
                     echo "Testing blue/green deployment before switching traffic..."
                     
@@ -407,98 +365,5 @@ stages:
 
                     kubectl scale deployment/todo-api-$SLOT -n todo-prod --replicas=0
 
-
-                    # # CRITICAL: Wait for the inactive deployment to be ready
-                    # echo "Waiting for $OTHER_SLOT deployment to be ready..."
-                    # kubectl wait --for=condition=available --timeout=300s deployment/todo-api-new -n todo-prod || {
-                    #   echo "❌ $OTHER_SLOT deployment is not ready!"
-                    #   exit 1
-                    # }
-                    
-                    # # Check if pods are running
-                    # kubectl get pods -n todo-prod -l app=todo-api,version=${SLOT}
-                    
-                    # echo "Testing $OTHER_SLOT slot before switching..." 
-
-                    # # Port forward to the inactive slot
-                    # echo "Starting port-forward to $OTHER_SLOT..."
-                    # kubectl port-forward -n todo-prod svc/todo-api-${OTHER_SLOT}-service 8080:80 &
-                    # PF_PID=$!
-
-                    # sleep 20
-                    
-                    # if ! ps -p $PF_PID > /dev/null; then
-                    #   echo "❌ Port-forward failed to start!"
-                    #   exit 1
-                    # fi
-
-                    # echo "Port-forward established (PID: $PF_PID)"
-
-
-                    # # Test health endpoint
-                    # HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
-                    
-                    # if [ "$HEALTH" != "200" ]; then
-                    #   echo "❌ $OTHER_SLOT slot health check FAILED (status: $HEALTH)"
-                    #   echo "❌ NOT switching traffic. $OTHER_SLOT deployment has issues!"
-                    #   kill $PF_PID
-                    #   exit 1
-                    # fi
-                    
-                    # echo "✅ $OTHER_SLOT slot is healthy (status: 200)"
-                    
-                    # # Additional API test
-                    # API=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/todos)
-                    # if [ "$API" != "200" ]; then
-                    #   echo "❌ $OTHER_SLOT slot API check FAILED (status: $API)"
-                    #   kill $PF_PID
-                    #   exit 1
-                    # fi
-                    
-                    # echo "✅ $OTHER_SLOT slot passed all tests"
-                    # kill $PF_PID
-                    
-                    # # Save slot info for next steps
-                    # echo "##vso[task.setvariable variable=activeSlot]$SLOT"
-                    # echo "##vso[task.setvariable variable=inactiveSlot]$OTHER_SLOT"
                   displayName: 'Check and switch'
                   continueOnError: false
-
-                # - script: |
-                #     echo "$(inactiveSlot) is healthy. Switching traffic from $(activeSlot) to $(inactiveSlot)..."
-                #     kubectl patch svc todo-api-service -n todo-prod -p "{\"spec\":{\"selector\":{\"version\":\"$(inactiveSlot)\"}}}"
-                #     echo "✅ Traffic switched to $(inactiveSlot)!"
-                #   displayName: 'Switch Traffic to healthy slot'
-
-                # - script: |
-                #     echo "Monitoring $(inactiveSlot) with production traffic..."
-                #     SERVICE_IP=$(kubectl get svc todo-api-service -n todo-prod -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-                    
-                #     # Monitor for 5 minutes
-                #     FAILURES=0
-                #     MAX_FAILURES=3
-                    
-                #     for i in {1..30}; do
-                #       sleep 10
-                      
-                #       HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/health)
-                      
-                #       if [ "$HEALTH" != "200" ]; then
-                #         FAILURES=$((FAILURES + 1))
-                #         echo "⚠️ Health check failed ($FAILURES/$MAX_FAILURES) - Status: $HEALTH"
-                        
-                #         if [ $FAILURES -ge $MAX_FAILURES ]; then
-                #           echo "❌ Too many failures! ROLLING BACK to $(activeSlot)..."
-                #           kubectl patch svc todo-api-service -n todo-prod -p "{\"spec\":{\"selector\":{\"version\":\"$(activeSlot)\"}}}"
-                #           echo "✅ Rolled back to $(activeSlot) slot"
-                #           exit 1
-                #         fi
-                #       else
-                #         echo "✅ Health check $i/30 passed"
-                #         FAILURES=0
-                #       fi
-                #     done
-                    
-                #     echo "✅ $(inactiveSlot) slot is stable with production traffic!"
-                #   displayName: 'Post-switch monitoring (Auto-rollback)'
-                #   continueOnError: false
