@@ -7,7 +7,8 @@ let todos = [
   { id: 1, title: 'Learn Docker', completed: false },
   { id: 2, title: 'Learn Kubernetes', completed: false },
   { id: 3, title: 'Build CI/CD Pipeline', completed: false },
-  { id: 4, title: 'Build Portfolio', completed: false }
+  { id: 4, title: 'Build Portfolio', completed: false },
+  { id: 4, title: 'Finalize project', completed: false }
 ];
 
 app.get('/health', (req, res) => {
