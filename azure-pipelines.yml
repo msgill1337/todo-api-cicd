@@ -11,8 +11,6 @@ variables:
   - group: todo-api-variables
   - name: buildNumber
     value: '$(Build.BuildNumber)'
-  - name: acrName
-    value: 'acrprod01mg1337'
   - name: imageName
     value: 'todo-api'
   - name: dockerConnectionName

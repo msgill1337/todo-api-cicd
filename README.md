@@ -162,7 +162,18 @@ variables:
 
 ### 6. Create and Run Pipeline
 
-1. Push code to Azure Repos or GitHub
+**If using GitHub:**
+1. Ensure your code is pushed to GitHub
+2. In Azure DevOps: Pipelines → Create Pipeline
+3. Select **GitHub (YAML)**
+4. Authorize Azure DevOps to access your GitHub account
+5. Select your repository
+6. Choose "Existing Azure Pipelines YAML file"
+7. Select `/azure-pipelines.yml`
+8. Save and run
+
+**If using Azure Repos:**
+1. Push code to Azure Repos
 2. In Azure DevOps: Pipelines → New Pipeline
 3. Select your repo
 4. Choose "Existing Azure Pipelines YAML file"
