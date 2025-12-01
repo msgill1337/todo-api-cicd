@@ -58,22 +58,55 @@ This project demonstrates a complete CI/CD workflow for containerized applicatio
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## Screenshots
+
+> **Note:** Screenshots will be added after deployment. See [SCREENSHOTS_GUIDE.md](SCREENSHOTS_GUIDE.md) for instructions on capturing screenshots.
+
+### Pipeline Overview
+<!-- Add screenshot of Azure DevOps pipeline running successfully -->
+<!-- ![Pipeline Overview](screenshots/pipeline/pipeline-overview.png) -->
+
+### Kubernetes Deployment
+<!-- Add screenshot of pods running in AKS -->
+<!-- ![Kubernetes Deployment](screenshots/kubernetes/pods-running.png) -->
+
+### Application Running
+<!-- Add screenshot of the Todo API homepage -->
+<!-- ![Application](screenshots/application/homepage.png) -->
+
+### Azure Container Registry
+<!-- Add screenshot of container images in ACR -->
+<!-- ![ACR Images](screenshots/azure/acr-images.png) -->
+
 ## Tech Stack
 
-**Application:**
-- Node.js 18
-- Express.js
-- Simple in-memory Todo API
+<div align="center">
 
-**Infrastructure:**
-- Azure Kubernetes Service (AKS)
-- Azure Container Registry (ACR)
-- Azure DevOps Pipelines
+### Application
+![Node.js](https://img.shields.io/badge/Node.js-18-339933?style=for-the-badge&logo=node.js&logoColor=white)
+![Express.js](https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
 
-**Tools:**
-- Docker (multi-stage builds)
-- Trivy (security scanning)
-- kubectl (K8s management)
+### Infrastructure & Cloud
+![Azure](https://img.shields.io/badge/Azure-0078D4?style=for-the-badge&logo=microsoft-azure&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Azure DevOps](https://img.shields.io/badge/Azure_DevOps-0078D7?style=for-the-badge&logo=azure-devops&logoColor=white)
+
+### Tools & Security
+![Trivy](https://img.shields.io/badge/Trivy-1904DA?style=for-the-badge&logo=aqua-security&logoColor=white)
+![YAML](https://img.shields.io/badge/YAML-CB171E?style=for-the-badge&logo=yaml&logoColor=white)
+
+</div>
+
+**Technologies Used:**
+- **Runtime:** Node.js 18, Express.js
+- **Containerization:** Docker (multi-stage builds)
+- **Orchestration:** Kubernetes (AKS)
+- **CI/CD:** Azure DevOps Pipelines
+- **Container Registry:** Azure Container Registry (ACR)
+- **Security:** Trivy vulnerability scanning
+- **Deployment Strategy:** Blue-Green deployments for zero-downtime
 
 ## Prerequisites
 
@@ -101,27 +134,29 @@ Create three service connections in Azure DevOps:
 
 **Azure Container Registry:**
 - Name: `acr-connection`
-- Registry: Your ACR name
+- Registry: Select your ACR instance
 - Service Principal authentication
 - Grant access to all pipelines
 
 **Kubernetes:**
 - Name: `aks-connection`
 - Authentication: Azure Subscription
-- Cluster: Your AKS cluster
+- Cluster: Select your AKS cluster
 - Namespace: Leave empty
 - Grant access to all pipelines
 
 ### 2. Variable Group
 
-Create a variable group named `todo-api-variables`:
+Create a variable group named `todo-api-variables` in Azure DevOps with the following variables:
 ```
-ACR_NAME: your-acr-name
-ACR_LOGIN_SERVER: your-acr-name.azurecr.io
-AKS_CLUSTER_NAME: your-aks-cluster
-AKS_RESOURCE_GROUP: your-aks-rg
-AZURE_SUBSCRIPTION: your-subscription-id
+ACR_NAME: <your-acr-name>
+ACR_LOGIN_SERVER: <your-acr-name>.azurecr.io
+AKS_CLUSTER_NAME: <your-aks-cluster-name>
+AKS_RESOURCE_GROUP: <your-aks-resource-group>
+AZURE_SUBSCRIPTION: <your-subscription-id>
 ```
+
+**Note:** Replace the values in angle brackets with your actual Azure resource names.
 
 ### 3. Environments with Approvals
 
@@ -131,11 +166,11 @@ Create three environments in Azure DevOps:
 - No approvals (auto-deploy)
 
 **staging:**
-- Add approval: Your name/team
+- Add approval: Configure approvers (yourself or team members)
 - Branch control: Any branch
 
 **production:**
-- Add approval: Your name/team
+- Add approval: Configure approvers (yourself or team members)
 - Branch control: main branch only
 
 ### 4. Kubernetes Namespaces
@@ -147,18 +182,18 @@ kubectl create namespace todo-staging
 kubectl create namespace todo-prod
 ```
 
-### 5. Update Pipeline Variables
+### 5. Configure Pipeline Variables
 
-Edit `azure-pipelines.yml` and update:
+The pipeline uses variables from the `todo-api-variables` group. Ensure your service connection names match:
 ```yaml
 variables:
-  - name: acrName
-    value: 'YOUR_ACR_NAME'  # Change this
   - name: dockerConnectionName
-    value: 'acr-connection'  # Match your service connection name
+    value: 'acr-connection'  # Must match your ACR service connection name
   - name: k8sServiceConnection
-    value: 'aks-connection'  # Match your service connection name
+    value: 'aks-connection'  # Must match your Kubernetes service connection name
 ```
+
+**Note:** The ACR name and other Azure resource details are stored in the variable group, not hardcoded in the pipeline file.
 
 ### 6. Create and Run Pipeline
 
@@ -413,7 +448,7 @@ kubectl logs -n todo-prod -l version=green
 **Solution:**
 - Check ACR service connection in Azure DevOps
 - Verify service principal has AcrPush role
-- Test manually: `az acr login --name <acr-name>`
+- Test manually: `az acr login --name <your-acr-name>`
 
 ## What I Learned
 
