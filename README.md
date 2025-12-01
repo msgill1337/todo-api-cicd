@@ -66,23 +66,22 @@ This project demonstrates a complete CI/CD workflow for containerized applicatio
 
 ## Screenshots
 
-> **Note:** Screenshots will be added after deployment. See [SCREENSHOTS_GUIDE.md](SCREENSHOTS_GUIDE.md) for instructions on capturing screenshots.
+### 🚀 Pipeline Overview
+Complete CI/CD pipeline execution showing all 4 stages (Build, Dev, Staging, Production) with successful deployments:
+![Pipeline Overview](screenshots/pipeline/pipeline-overview.png)
 
-### Pipeline Overview
-<!-- Add screenshot of Azure DevOps pipeline running successfully -->
-<!-- ![Pipeline Overview](screenshots/pipeline/pipeline-overview.png) -->
+### 🔄 Blue-Green Deployment in Action
+Detailed console output showing the blue-green deployment process:
+- Detecting active slot (blue)
+- Deploying new version to inactive slot (green)
+- Running smoke tests via port-forward
+- Switching traffic from blue to green
+- Scaling down old version
+![Blue-Green Deployment](screenshots/pipeline/blue-green-deployment.png)
 
-### Kubernetes Deployment
-<!-- Add screenshot of pods running in AKS -->
-<!-- ![Kubernetes Deployment](screenshots/kubernetes/pods-running.png) -->
-
-### Application Running
-<!-- Add screenshot of the Todo API homepage -->
-<!-- ![Application](screenshots/application/homepage.png) -->
-
-### Azure Container Registry
-<!-- Add screenshot of container images in ACR -->
-<!-- ![ACR Images](screenshots/azure/acr-images.png) -->
+### 🌐 Deployed Application
+Live Todo API running in production on Azure Kubernetes Service:
+![Production Application](screenshots/application/production-homepage.png)
 
 
 ## Prerequisites
