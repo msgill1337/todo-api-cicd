@@ -318,6 +318,25 @@ stages:
                 - script: |
                     echo "Testing blue/green deployment before switching traffic..."
                     
+                    # Check if service exists (first deployment)
+                    if ! kubectl get svc todo-api-service -n todo-prod &>/dev/null; then
+                      echo "🆕 First deployment detected - setting up blue-green infrastructure..."
+                      
+                      # Replace tokens in prod deployment manifests
+                      sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/prod-deployment.yaml
+                      sed -i 's|#{ENVIRONMENT}#|production|g' k8s/prod-deployment.yaml
+                      sed -i 's|#{BUILD_NUMBER}#|$(Build.BuildId)|g' k8s/prod-deployment.yaml
+                      
+                      # Deploy blue-green infrastructure
+                      kubectl apply -f k8s/prod-deployment.yaml -n todo-prod
+                      
+                      # Wait for blue deployment to be ready
+                      kubectl rollout status deployment/todo-api-blue -n todo-prod --timeout=5m
+                      
+                      echo "✅ Initial blue-green setup complete! Blue is active."
+                      exit 0
+                    fi
+                    
                     # Get the active slot 
                     SLOT=$(kubectl get svc todo-api-service -n todo-prod -o jsonpath='{.spec.selector.version}')
                     echo "Active slot: $SLOT"
@@ -331,8 +350,18 @@ stages:
                     
                     echo "🚀 Deploying to $OTHER_SLOT..."
 
-                    kubectl set image deployment/todo-api-$OTHER_SLOT -n todo-prod \
-                      todo-api=$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId) --record
+                    # Check if deployment exists, if not create it
+                    if ! kubectl get deployment todo-api-$OTHER_SLOT -n todo-prod &>/dev/null; then
+                      echo "Creating $OTHER_SLOT deployment..."
+                      # Replace tokens and create deployment
+                      sed -i 's|#{ACR_NAME}#\.azurecr\.io/todo-api:#{BUILD_NUMBER}#|$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId)|g' k8s/prod-deployment.yaml
+                      sed -i 's|#{ENVIRONMENT}#|production|g' k8s/prod-deployment.yaml
+                      sed -i 's|#{BUILD_NUMBER}#|$(Build.BuildId)|g' k8s/prod-deployment.yaml
+                      kubectl apply -f k8s/prod-deployment.yaml -n todo-prod
+                    else
+                      kubectl set image deployment/todo-api-$OTHER_SLOT -n todo-prod \
+                        todo-api=$(ACR_LOGIN_SERVER)/todo-api:$(Build.BuildId) --record
+                    fi
 
                     echo "📈 Scaling up $OTHER_SLOT"
 
