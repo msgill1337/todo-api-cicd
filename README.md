@@ -2,6 +2,12 @@
 
 A production-ready CI/CD pipeline that deploys a containerized Node.js API to Azure Kubernetes Service using Azure DevOps. Features automated testing, security scanning, and blue-green deployments for zero-downtime releases.
 
+![Azure DevOps](https://img.shields.io/badge/Azure_DevOps-0078D7?style=for-the-badge&logo=azure-devops&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-18-339933?style=for-the-badge&logo=node.js&logoColor=white)
+![Trivy](https://img.shields.io/badge/Trivy-1904DA?style=for-the-badge&logo=aqua-security&logoColor=white)
+
 ## Overview
 
 This project demonstrates a complete CI/CD workflow for containerized applications. The pipeline builds Docker images, runs tests, scans for vulnerabilities, and deploys to AKS across three environments (dev, staging, production) with manual approval gates.
@@ -49,7 +55,7 @@ This project demonstrates a complete CI/CD workflow for containerized applicatio
 │  ┌────────────┐   ┌────────────┐   ┌────────────────────────┐   │
 │  │  todo-dev  │   │todo-staging│   │     todo-prod          │   │
 │  │            │   │            │   │                        │   │
-│  │  2 pods    │   │  2 pods    │   │  Blue: 2 pods  ◄─┐     │   │
+│  │  2 pods    │   │  2 pods    │   │  Blue: 2 pods   ◄─┐    │   │
 │  │            │   │            │   │  Green: 0 pods    │    │   │
 │  │  LB: IP1   │   │  LB: IP2   │   │                   │    │   │
 │  └────────────┘   └────────────┘   │  Service switches │    │   │
@@ -78,35 +84,6 @@ This project demonstrates a complete CI/CD workflow for containerized applicatio
 <!-- Add screenshot of container images in ACR -->
 <!-- ![ACR Images](screenshots/azure/acr-images.png) -->
 
-## Tech Stack
-
-<div align="center">
-
-### Application
-![Node.js](https://img.shields.io/badge/Node.js-18-339933?style=for-the-badge&logo=node.js&logoColor=white)
-![Express.js](https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white)
-![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
-
-### Infrastructure & Cloud
-![Azure](https://img.shields.io/badge/Azure-0078D4?style=for-the-badge&logo=microsoft-azure&logoColor=white)
-![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![Azure DevOps](https://img.shields.io/badge/Azure_DevOps-0078D7?style=for-the-badge&logo=azure-devops&logoColor=white)
-
-### Tools & Security
-![Trivy](https://img.shields.io/badge/Trivy-1904DA?style=for-the-badge&logo=aqua-security&logoColor=white)
-![YAML](https://img.shields.io/badge/YAML-CB171E?style=for-the-badge&logo=yaml&logoColor=white)
-
-</div>
-
-**Technologies Used:**
-- **Runtime:** Node.js 18, Express.js
-- **Containerization:** Docker (multi-stage builds)
-- **Orchestration:** Kubernetes (AKS)
-- **CI/CD:** Azure DevOps Pipelines
-- **Container Registry:** Azure Container Registry (ACR)
-- **Security:** Trivy vulnerability scanning
-- **Deployment Strategy:** Blue-Green deployments for zero-downtime
 
 ## Prerequisites
 
