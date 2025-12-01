@@ -1,12 +1,12 @@
 # Todo API - Azure DevOps CI/CD Pipeline
 
-A production-ready CI/CD pipeline that deploys a containerized Node.js API to Azure Kubernetes Service using Azure DevOps. Features automated testing, security scanning, and blue-green deployments for zero-downtime releases.
-
 ![Azure DevOps](https://img.shields.io/badge/Azure_DevOps-0078D7?style=for-the-badge&logo=azure-devops&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-18-339933?style=for-the-badge&logo=node.js&logoColor=white)
 ![Trivy](https://img.shields.io/badge/Trivy-1904DA?style=for-the-badge&logo=aqua-security&logoColor=white)
+
+A production-ready CI/CD pipeline that deploys a containerized Node.js API to Azure Kubernetes Service using Azure DevOps. Features automated testing, security scanning, and blue-green deployments for zero-downtime releases.
 
 ## Overview
 
