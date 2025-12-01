@@ -79,6 +79,10 @@ Detailed console output showing the blue-green deployment process:
 - Scaling down old version
 ![Blue-Green Deployment](screenshots/pipeline/blue-green-deployment.png)
 
+### ☸️ Kubernetes Blue-Green Deployments
+Production namespace showing both blue and green deployments - green is active (2/2 pods ready) while blue is scaled down (0/0 pods):
+![Kubernetes Blue-Green Deployments](screenshots/kubernetes/k8s-blue-green-deployments.png)
+
 ### 🌐 Deployed Application
 Live Todo API running in production on Azure Kubernetes Service:
 ![Production Application](screenshots/application/production-homepage.png)
